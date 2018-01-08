@@ -5,6 +5,10 @@ import os
 import tweepy
 import yaml
 
+from tinydb import TinyDB
+
+db = TinyDB('db.json')
+
 
 def setup_logging(
     default_path='logging.yml',
@@ -34,6 +38,11 @@ class StreamListener(tweepy.StreamListener):
         if status.retweeted:
             return
         logger.info(f"@{status.user.screen_name} twitted: {status.text}")
+        db.insert({
+            'created_at': str(status.created_at),
+            'user': status.user.screen_name,
+            'text': status.text
+        })
 
 
 if __name__ == '__main__':
