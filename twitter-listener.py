@@ -53,9 +53,11 @@ if __name__ == '__main__':
         'usernames', metavar='username', type=str, nargs='+',
         help='Twitter username of users to follow'
     )
+    parser.add_argument('-f', '--file', type=str, default='db.json')
 
     args = parser.parse_args()
     screen_names = args.usernames
+    db_file = args.file
 
     auth = tweepy.OAuthHandler(
         os.environ['TWITTER_CONSUMER_KEY'],
@@ -68,7 +70,7 @@ if __name__ == '__main__':
     api = tweepy.API(auth)
 
     user_ids = [api.get_user(name).id for name in screen_names]
-    stream_listener = StreamListener(TinyDB('db.json'))
+    stream_listener = StreamListener(TinyDB(db_file))
     stream = tweepy.Stream(auth=api.auth, listener=stream_listener)
 
     for screen_name, user_id in zip(screen_names, user_ids):
