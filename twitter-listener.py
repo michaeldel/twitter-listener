@@ -7,8 +7,6 @@ import yaml
 
 from tinydb import TinyDB
 
-db = TinyDB('db.json')
-
 
 def setup_logging(
     default_path='logging.yml',
@@ -33,12 +31,16 @@ logger = logging.getLogger(__name__)
 
 
 class StreamListener(tweepy.StreamListener):
+    def __init__(self, db=TinyDB('db.json'), *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.db = db
+
     def on_status(self, status):
         # ignore other users' tweets
         if status.retweeted:
             return
         logger.info(f"@{status.user.screen_name} twitted: {status.text}")
-        db.insert({
+        self.db.insert({
             'created_at': str(status.created_at),
             'user': status.user.screen_name,
             'text': status.text
@@ -66,7 +68,7 @@ if __name__ == '__main__':
     api = tweepy.API(auth)
 
     user_ids = [api.get_user(name).id for name in screen_names]
-    stream_listener = StreamListener()
+    stream_listener = StreamListener(TinyDB('db.json'))
     stream = tweepy.Stream(auth=api.auth, listener=stream_listener)
 
     for screen_name, user_id in zip(screen_names, user_ids):
