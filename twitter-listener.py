@@ -2,10 +2,11 @@ import argparse
 import logging
 import logging.config
 import os
+import sys
 import tweepy
 import yaml
 
-from tinydb import TinyDB
+from backends import TinyDBBackend, DiscordWebhookBackend
 
 
 def setup_logging(
@@ -31,20 +32,16 @@ logger = logging.getLogger(__name__)
 
 
 class StreamListener(tweepy.StreamListener):
-    def __init__(self, db=TinyDB('db.json'), *args, **kwargs):
+    def __init__(self, backend, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.db = db
+        self.backend = backend
 
     def on_status(self, status):
         # ignore other users' tweets
         if status.retweeted:
             return
         logger.info(f"@{status.user.screen_name} twitted: {status.text}")
-        self.db.insert({
-            'created_at': str(status.created_at),
-            'user': status.user.screen_name,
-            'text': status.text
-        })
+        self.backend.write(status)
 
 
 if __name__ == '__main__':
@@ -53,11 +50,29 @@ if __name__ == '__main__':
         'usernames', metavar='username', type=str, nargs='+',
         help='Twitter username of users to follow'
     )
+    parser.add_argument(
+        '-b', '--backend',
+        default='tinydb', const='tinydb', nargs='?',
+        choices=['tinydb', 'discord'],
+        help="Choose storage backend (default: %(default)s)"
+    )
     parser.add_argument('-f', '--file', type=str, default='db.json')
+    parser.add_argument('-u', '--url', help="Discord webhook url", type=str)
 
     args = parser.parse_args()
     screen_names = args.usernames
-    db_file = args.file
+
+    if args.backend == 'tinydb':
+        db_file = args.file
+        backend = TinyDBBackend(db_file)
+        logger.info(f"TinyDB backend ({db_file})")
+    elif args.backend == 'discord':
+        url = args.url
+        backend = DiscordWebhookBackend(endpoint=url)
+        logger.info(f"Discord Webhook backend ({url})")
+    else:  # this should not happen
+        logger.error(f"Bad backend choice")
+        sys.exit(1)
 
     auth = tweepy.OAuthHandler(
         os.environ['TWITTER_CONSUMER_KEY'],
@@ -70,7 +85,7 @@ if __name__ == '__main__':
     api = tweepy.API(auth)
 
     user_ids = [api.get_user(name).id for name in screen_names]
-    stream_listener = StreamListener(TinyDB(db_file))
+    stream_listener = StreamListener(backend)
     stream = tweepy.Stream(auth=api.auth, listener=stream_listener)
 
     for screen_name, user_id in zip(screen_names, user_ids):
